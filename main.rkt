@@ -1,7 +1,9 @@
 #lang racket
 
 (require glfw3)
-(require opengl)
+(require opengl
+         opengl/util)
+(require ffi/vector)
 
 (glfwInit)
 
@@ -16,18 +18,64 @@
 ;; Ensure the context is correct
 (glfwMakeContextCurrent window)
 
-; (display (glfwGetVersionString))
+(define-syntax dangerous
+  (syntax-rules ()
+    [(_ body ...)
+     (begin (define (container) (with-handlers
+                  [(exn:fail? (lambda (exn)
+                                (display (exn-message exn))
+                                (kill window)))]
+                                  body ...))
+            (container))]))
 
-;; Our run loop
-(define (run window-pointer)
-  (if (= (glfwWindowShouldClose window-pointer) 1)
-      (end window-pointer)
+; (display (glfwGetVersionString)) Debug
+
+;; Our input processing
+(define (processInput window-pointer)
+  (when (equal? (glfwGetKey window-pointer GLFW_KEY_ESCAPE) GLFW_PRESS)
+    (glfwSetWindowShouldClose window-pointer GLFW_TRUE)))
+
+;; Check whether to continue the draw loop
+(define (maybe-continue window-pointer)
+  (if (= (glfwWindowShouldClose window-pointer) GLFW_TRUE)
+      (kill window-pointer)
       (run window-pointer)))
 
+;; Triangle geometry
+(define vertices (f64vector -0.5 -0.5 0.0
+                            0.5 -0.5 0.0
+                            0.0 0.5 0.0))
+
+(define my-buffer 1)
+(glGenBuffers my-buffer)
+(glBindBuffer GL_ARRAY_BUFFER my-buffer)
+(glBufferData GL_ARRAY_BUFFER (f64vector-length vertices) vertices GL_STATIC_DRAW)
+
 ;; Our kill function
-(define (end window-pointer)
+(define (kill window-pointer)
   (glfwDestroyWindow window-pointer)
   (glfwTerminate))
+
+(dangerous
+    (define my-vertex-shader (create-program (load-shader "test.glsl" GL_VERTEX_SHADER)))
+    (glUseProgram my-vertex-shader))
+
+; (define my-fragment-shader (create-program (load-shader "fragment.glsl" GL_FRAGMENT_SHADER)))
+
+;; Our draw loop
+(define (run window-pointer)
+             (with-handlers ([exn:fail? (lambda (exn)
+                                  (display (exn-message exn))
+                                  (kill window-pointer))])
+  (processInput window-pointer)
+
+  (glClearColor 0.2 0.3 0.3 1.0)
+  (glClear GL_COLOR_BUFFER_BIT)
+
+  (glfwPollEvents)
+  (glfwSwapBuffers window-pointer)
+
+  (maybe-continue window-pointer)))
 
 ;; Run the program
 (run window)
