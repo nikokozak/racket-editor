@@ -28,6 +28,15 @@
                                   body ...))
             (container))]))
 
+(define-syntax debug
+  (syntax-rules ()
+    [(_ st body)
+     (let [(result body)]
+       (display st)
+       (display result)
+       (newline)
+       result)]))
+
 ; (display (glfwGetVersionString)) Debug
 
 ;; Our input processing
@@ -54,11 +63,54 @@
 ;; Our kill function
 (define (kill window-pointer)
   (glfwDestroyWindow window-pointer)
-  (glfwTerminate))
+  (glfwTerminate)
+  (exit 1))
+
+(define vertexShaderSource "layout (location = 0) in vec3 aPos;\nvoid main()\n{\ngl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n}\0")
+
+(define vertexShaderPort (open-input-string vertexShaderSource))
+
+#;(dangerous
+    (define my-vertex-shader (create-program (debug "Shader result: " (load-shader vertexShaderPort GL_VERTEX_SHADER))))
+    (glUseProgram my-vertex-shader))
+
+(define (load-shader-source shader port)
+  (let* ((lines (for/vector ((line (in-lines port))) (string-append line "\n")))
+         (sizes (for/list ((line (in-vector lines))) (string-length line)))
+         (sizes (list->s32vector sizes)))
+    (glShaderSource shader (vector-length lines) lines sizes)))
+
+(define (get-program-parameter program pname)
+  (glGetProgramiv program pname))
+
+(define (get-program-info-log program)
+  (let ((log-length (get-program-parameter program GL_INFO_LOG_LENGTH)))
+    (let-values (((actual-length info-log) (glGetProgramInfoLog program log-length)))
+      (bytes->string/utf-8 info-log #\? 0 actual-length))))
+
+(define vertexShader
+  (let* [(shader (glCreateShader GL_VERTEX_SHADER))]
+    (load-shader-source shader vertexShaderPort)
+    (glCompileShader shader)
+    (display (glGetShaderiv shader GL_COMPILE_STATUS))
+    shader))
 
 (dangerous
-    (define my-vertex-shader (create-program (load-shader "test.glsl" GL_VERTEX_SHADER)))
-    (glUseProgram my-vertex-shader))
+ (define program (glCreateProgram))
+ (display "createProgram: ")
+ (display (get-program-info-log program))
+ (newline)
+ (glAttachShader program vertexShader)
+ (display "attachShader: ")
+ (display (get-program-info-log program))
+ (newline)
+ (display "Poitner: ")
+ (display (glGetPointerv vertexShader))
+ (newline)
+ (glLinkProgram program)
+ (display "linkProgram: ")
+ (display (get-program-info-log program))
+ (newline))
 
 ; (define my-fragment-shader (create-program (load-shader "fragment.glsl" GL_FRAGMENT_SHADER)))
 
