@@ -21,8 +21,9 @@
 (define-syntax dangerous
   (syntax-rules ()
     [(_ body ...)
-     (begin (define (container) (with-handlers
-                  [(exn:fail? (lambda (exn)
+     (begin
+       (define (container)
+         (with-handlers [(exn:fail? (lambda (exn)
                                 (display (exn-message exn))
                                 (kill window)))]
                                   body ...))
@@ -66,51 +67,48 @@
   (glfwTerminate)
   (exit 1))
 
-(define vertexShaderSource "layout (location = 0) in vec3 aPos;\nvoid main()\n{\ngl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n}\0")
+(define vertexShaderSource #("#version 330 core\nlayout(location = 0) in vec3 position;\nvoid main()\n{\n   gl_Position = vec4(position.xyz, 1.0);\n}\0"))
+(define fragmentShaderSource #("#version 330 core\nlayout(location = 0) out vec4 color;\nvoid main()\n{\n   color = vec4(1.0, 0.5, 0.2, 1.0);\n}\0"))
 
-(define vertexShaderPort (open-input-string vertexShaderSource))
+(define program
+  (create-program
+   (load-shader "./vertex.glsl" GL_VERTEX_SHADER)
+   (load-shader "./fragment.glsl" GL_FRAGMENT_SHADER)))
+
+#;(define vertexShaderPort (open-input-string vertexShaderSource))
+
+#;(define (makeVertexShader)
+  (let* [(vertexShader (glCreateShader GL_VERTEX_SHADER))]
+    (glShaderSource vertexShader 1 vertexShaderSource (list->s32vector (for/list [(line (in-vector vertexShaderSource))] (string-length line))))
+    (glCompileShader vertexShader) ;; this seems to be working
+    (display "Vertex Shader compilation: ")
+    (display (glGetShaderiv vertexShader GL_COMPILE_STATUS))
+    (newline)
+    vertexShader))
+
+#;(define (makeFragmentShader)
+  (let* [(fragmentShader (glCreateShader GL_FRAGMENT_SHADER))]
+    (glShaderSource fragmentShader 1 fragmentShaderSource (list->s32vector (for/list [(line (in-vector fragmentShaderSource))] (string-length line))))
+    (glCompileShader fragmentShader)
+    (display "Fragment Shader compilation: ")
+    (display (glGetShaderiv fragmentShader GL_COMPILE_STATUS))
+    (newline)
+    fragmentShader))
+
+
+#;(dangerous
+  (define program (glCreateProgram))
+  (glAttachShader program (makeVertexShader))
+  (glAttachShader program (makeFragmentShader))
+  (glLinkProgram program)
+  (display "Program status: ")
+  (display (glGetProgramiv program GL_LINK_STATUS))
+  #;(display (glGetProgramInfoLog program 512))
+  (newline))
 
 #;(dangerous
     (define my-vertex-shader (create-program (debug "Shader result: " (load-shader vertexShaderPort GL_VERTEX_SHADER))))
     (glUseProgram my-vertex-shader))
-
-(define (load-shader-source shader port)
-  (let* ((lines (for/vector ((line (in-lines port))) (string-append line "\n")))
-         (sizes (for/list ((line (in-vector lines))) (string-length line)))
-         (sizes (list->s32vector sizes)))
-    (glShaderSource shader (vector-length lines) lines sizes)))
-
-(define (get-program-parameter program pname)
-  (glGetProgramiv program pname))
-
-(define (get-program-info-log program)
-  (let ((log-length (get-program-parameter program GL_INFO_LOG_LENGTH)))
-    (let-values (((actual-length info-log) (glGetProgramInfoLog program log-length)))
-      (bytes->string/utf-8 info-log #\? 0 actual-length))))
-
-(define vertexShader
-  (let* [(shader (glCreateShader GL_VERTEX_SHADER))]
-    (load-shader-source shader vertexShaderPort)
-    (glCompileShader shader)
-    (display (glGetShaderiv shader GL_COMPILE_STATUS))
-    shader))
-
-(dangerous
- (define program (glCreateProgram))
- (display "createProgram: ")
- (display (get-program-info-log program))
- (newline)
- (glAttachShader program vertexShader)
- (display "attachShader: ")
- (display (get-program-info-log program))
- (newline)
- (display "Poitner: ")
- (display (glGetPointerv vertexShader))
- (newline)
- (glLinkProgram program)
- (display "linkProgram: ")
- (display (get-program-info-log program))
- (newline))
 
 ; (define my-fragment-shader (create-program (load-shader "fragment.glsl" GL_FRAGMENT_SHADER)))
 
